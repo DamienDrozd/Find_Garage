@@ -1,2 +1,32 @@
 BD/*
 BD
+
+# Variables d'environnement
+.env
+
+# Base de données SQLite
+*.sqlite
+*.db
+
+# Cache Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual environment
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Backup files
+*.backup
+*_backup.*
