@@ -9,8 +9,33 @@ Ce projet est un système d'analyse et de validation de bâtiments agricoles uti
 - **Extraction de données géospatiales** : Traitement des données de la BD TOPO pour identifier les bâtiments agricoles
 - **Interface de validation interactive** : Application Streamlit pour visualiser et valider manuellement chaque bâtiment
 - **Cartographie interactive** : Visualisation sur cartes avec fonds satellite
-- **Base de données de validation** : Stockage SQLite des validations utilisateur
+- **Base de données flexible** : Support SQLite et PostgreSQL via variable d'environnement
 - **Export de données** : Export en CSV et Excel des résultats
+
+## Base de données
+
+L'application supporte maintenant **PostgreSQL** et **SQLite** :
+- **PostgreSQL** : Configurez `DATABASE_URL` dans un fichier `.env`
+- **SQLite** : Utilisé par défaut si `DATABASE_URL` n'est pas définie
+
+Voir le fichier `MIGRATION_POSTGRESQL.md` pour plus de détails.
+
+## Installation rapide
+
+```bash
+# Installer les dépendances
+./install_dependencies.sh
+
+# Configurer la base de données (optionnel)
+cp .env.example .env
+# Éditez .env pour configurer PostgreSQL
+
+# Tester la connexion
+python test_database.py
+
+# Lancer l'application
+./run_app.sh 
+```
 
 ## Structure du projet
 

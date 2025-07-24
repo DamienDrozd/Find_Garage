@@ -2,55 +2,92 @@ import streamlit as st
 import pandas as pd
 import folium
 from streamlit_folium import st_folium
-import sqlite3
+import os
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import SQLAlchemyError
+from dotenv import load_dotenv
+
+# Charger les variables d'environnement
+load_dotenv()
 # streamlit run analyse_streamlit.py
 
 # 
 
-# --- Paramétrage fichier base ---
-DB_FILE = "resultats_batiments.sqlite"
+# --- Paramétrage base de données ---
+# Utilise DATABASE_URL pour PostgreSQL, sinon fallback vers SQLite
+DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///resultats_batiments.sqlite')
 
-def create_or_open_db(dbfile=DB_FILE):
-    conn = sqlite3.connect(dbfile)
-    c = conn.cursor()
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS validation (
-            cleabs TEXT PRIMARY KEY,
-            validation TEXT,
-            commentaire TEXT DEFAULT NULL
-        )
-    ''')
-    conn.commit()
-    return conn
+# Correction pour les URLs PostgreSQL avec le dialecte 'postgres'
+if DATABASE_URL.startswith('postgres://'):
+    DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
+
+def get_engine():
+    """Crée et retourne un moteur SQLAlchemy"""
+    return create_engine(DATABASE_URL)
+
+def create_or_open_db():
+    """Initialise la base de données et crée les tables si nécessaire"""
+    engine = get_engine()
+    with engine.connect() as conn:
+        # Créer la table validation si elle n'existe pas
+        conn.execute(text('''
+            CREATE TABLE IF NOT EXISTS validation (
+                cleabs TEXT PRIMARY KEY,
+                validation TEXT,
+                commentaire TEXT DEFAULT NULL
+            )
+        '''))
+        conn.commit()
+    return engine
 
 def set_validation(cleabs, validation, commentaire=None):
-    conn = create_or_open_db()
-    c = conn.cursor()
-    c.execute('''
-        INSERT INTO validation (cleabs, validation, commentaire)
-        VALUES (?, ?, ?)
-        ON CONFLICT(cleabs) DO UPDATE SET validation=excluded.validation, commentaire=excluded.commentaire
-    ''', (cleabs, validation, commentaire))
-    conn.commit()
-    conn.close()
+    """Enregistre ou met à jour une validation dans la base de données"""
+    engine = get_engine()
+    with engine.connect() as conn:
+        # Utilise UPSERT compatible PostgreSQL et SQLite
+        if 'postgresql' in DATABASE_URL:
+            # Syntaxe PostgreSQL
+            conn.execute(text('''
+                INSERT INTO validation (cleabs, validation, commentaire)
+                VALUES (:cleabs, :validation, :commentaire)
+                ON CONFLICT(cleabs) DO UPDATE SET 
+                    validation = EXCLUDED.validation, 
+                    commentaire = EXCLUDED.commentaire
+            '''), {"cleabs": cleabs, "validation": validation, "commentaire": commentaire})
+        else:
+            # Syntaxe SQLite
+            conn.execute(text('''
+                INSERT INTO validation (cleabs, validation, commentaire)
+                VALUES (:cleabs, :validation, :commentaire)
+                ON CONFLICT(cleabs) DO UPDATE SET 
+                    validation = excluded.validation, 
+                    commentaire = excluded.commentaire
+            '''), {"cleabs": cleabs, "validation": validation, "commentaire": commentaire})
+        conn.commit()
 
 def get_validation(cleabs):
-    conn = create_or_open_db()
-    c = conn.cursor()
-    c.execute('SELECT validation, commentaire FROM validation WHERE cleabs=?', (cleabs,))
-    row = c.fetchone()
-    conn.close()
-    return row[0] if row else None, row[1] if row else None
+    """Récupère la validation et le commentaire pour un cleabs donné"""
+    engine = get_engine()
+    with engine.connect() as conn:
+        result = conn.execute(
+            text('SELECT validation, commentaire FROM validation WHERE cleabs = :cleabs'), 
+            {"cleabs": cleabs}
+        )
+        row = result.fetchone()
+        return (row[0], row[1]) if row else (None, None)
 
 def select_all_validations():
-    conn = create_or_open_db()
-    df = pd.read_sql_query("SELECT * FROM validation", conn)
-    conn.close()
+    """Récupère toutes les validations depuis la base de données"""
+    engine = get_engine()
+    df = pd.read_sql_query("SELECT * FROM validation", engine)
     return df
 
 @st.cache_data
 def charger_batiments_csv(fichier_csv):
     return pd.read_csv(fichier_csv)
+
+# --- Initialisation de la base de données ---
+create_or_open_db()
 
 fichier_csv = "batiments_agricoles_kepler.csv"
 df = charger_batiments_csv(fichier_csv)
